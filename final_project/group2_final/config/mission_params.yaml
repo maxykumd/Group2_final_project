@@ -1,0 +1,19 @@
+/**: #<- apply these param to any node that load the file regard of name/namespace
+  ros__parameters:
+    # Patrol order. Edit this string array to change the visit
+    # order without touching any pose values below.
+    zone_order: ["zone_a", "zone_b", "zone_c", "zone_d"]
+
+    # Per-zone poses (metres + radians) in the map frame.
+    zones:
+      zone_a: {x: -3.0, y:  3.0, yaw:  0.0}
+      zone_b: {x:  3.5, y:  3.0, yaw:  1.57}
+      zone_c: {x:  4.0, y: -3.0, yaw:  3.14}
+      zone_d: {x: -3.5, y: -3.0, yaw: -1.57}
+
+    base_station:
+      x: 0.0
+      y: 0.0
+      yaw: 0.0
+
+    tick_rate_hz: 2.0

@@ -1,0 +1,7 @@
+# Request
+string zone_id
+---
+# Response
+bool found
+float64 survivor_x
+float64 survivor_y

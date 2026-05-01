@@ -1,0 +1,6 @@
+# Request
+string survivor_id
+geometry_msgs/PointStamped location
+---
+# Response
+bool acknowledged
