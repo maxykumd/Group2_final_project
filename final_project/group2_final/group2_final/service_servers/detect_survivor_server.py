@@ -3,7 +3,7 @@
 from rclpy.node import Node
 from group2_final_interfaces.srv import DetectSurvivor
 
-# Hardcoded dictionary: zones A and C have survivors
+# zones A and C have survivors
 SURVIVORS: dict[str, tuple[float, float]] = {
     "zone_a": (-2.5, 3.2),   
     "zone_c": (4.1, -2.5),}
@@ -23,7 +23,7 @@ class DetectSurvivorServer(Node):
         self._srv = self.create_service(
             DetectSurvivor,
             "detect_survivor",
-            self._handle_requestav
+            self._handle_request
         )
         self.get_logger().info("DetectSurvivor service ready.")
     

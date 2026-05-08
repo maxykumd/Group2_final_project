@@ -1,4 +1,4 @@
-/**: #<- apply these param to any node that load the file regard of name/namespace
+/**:
   ros__parameters:
     # Patrol order. Edit this string array to change the visit
     # order without touching any pose values below.
