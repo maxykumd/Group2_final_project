@@ -1,233 +1,129 @@
-"""Combined mapping and navigation launcher.
+# Name: Yossaphat Kulvatunyou & Nam Facchetti
+# Module: search_and_rescue_launch.py - BT action node that broadcasts a static TF frame for a survivor.
 
-One file, three modes selected via the `mode` launch argument:
+"""Launch file for the Search and Rescue mission.
 
-  - mode:=mapping              SLAM Toolbox only (build a map, no autonomous nav)
-  - mode:=navigation           Nav2 + AMCL on a previously saved map
-  - mode:=explore   SLAM Toolbox + Nav2 (navigate while mapping)
+Brings up Nav2 localization + navigation, simulated service servers,
+and the behavior tree entry point in a single command.
 
-Examples:
-  ros2 launch nav_demo map_nav.launch.py mode:=mapping
-  ros2 launch nav_demo map_nav.launch.py mode:=navigation map:=/path/to/map.yaml
-  ros2 launch nav_demo map_nav.launch.py mode:=navigation goal_source:=waypoints
-  ros2 launch nav_demo map_nav.launch.py mode:=explore goal_source:=single_goal
+Usage:
+    Terminal 1: ros2 launch rosbot_gazebo final_project_world.launch.py
+    Terminal 2: ros2 launch group2_final search_and_rescue.launch.py
 """
+
 import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import (
-    DeclareLaunchArgument,
-    GroupAction,
-    IncludeLaunchDescription,
-    LogInfo,
-)
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import (
-    LaunchConfiguration,
-    PathJoinSubstitution,
-    PythonExpression,
-)
+from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
+from launch.substitutions import PathJoinSubstitution
 
 
-def generate_launch_description():
-    pkg_share = get_package_share_directory("group2_final")
+def generate_launch_description() -> LaunchDescription:
+    """Generate the launch description for the search and rescue mission.
 
-    map_file     = os.path.join(pkg_share, 'maps', 'final_project_map.yaml')
+    Returns:
+        A LaunchDescription containing all required nodes and includes.
+    """
+    pkg_share = get_package_share_directory('group2_final')
+
+    # File paths 
+    map_file = os.path.join(pkg_share, 'maps', 'final_project_map.yaml')
     nav2_params  = os.path.join(pkg_share, 'config', 'nav2_params.yaml')
     mission_params = os.path.join(pkg_share, 'config', 'mission_params.yaml')
-    rviz_config  = os.path.join(pkg_share, 'rviz',   'nav2.rviz')
+    rviz_config = os.path.join(pkg_share, 'rviz', 'nav2.rviz')
 
-    # ------------------------------------------------------------------
-    # Launch arguments
-    # ------------------------------------------------------------------
-    mode_arg = DeclareLaunchArgument(
-        "mode",
-        default_value="explore",
-        choices=["mapping", "navigation", "explore"],
-        description=(
-            "Which stack to launch: "
-            "'mapping' (SLAM only), "
-            "'navigation' (Nav2 + AMCL on saved map), "
-            "'explore' (SLAM + Nav2)."
-        ),
-    )
-
-    use_sim_time_arg = DeclareLaunchArgument(
-        "use_sim_time",
-        default_value="true",
-        description="Use simulation (Gazebo) clock.",
-    )
-
-    # Resolve default map path eagerly so it propagates cleanly into
-    # nav2_bringup's localization_launch.py (PathJoinSubstitution defaults
-    # don't always survive IncludeLaunchDescription).
-    default_map_path = os.path.join(pkg_share, "maps", "husarion_map.yaml")
-    map_arg = DeclareLaunchArgument(
-        "map",
-        default_value=default_map_path,
-        description="Full path to map yaml (only used when mode:=navigation).",
-    )
-
+    # Launch arguments 
     rviz_arg = DeclareLaunchArgument(
-        "rviz",
-        default_value="true",
-        description="Start RViz with the package's nav2 view.",
+        'rviz',
+        default_value='true',
+        description='Start RViz with the nav2 view.',
     )
 
-    goal_source_arg = DeclareLaunchArgument(
-        "goal_source",
-        default_value="manual",
-        choices=["single_goal", "waypoints", "manual"],
-        description=(
-            "How navigation goals are issued (only applies when Nav2 is running): "
-            "'single_goal' / 'waypoints' run the navigation_node_exe demo node; "
-            "'manual' skips it so you can click goals in RViz."
-        ),
-    )
-
-    # ------------------------------------------------------------------
-    # Shared paths
-    # ------------------------------------------------------------------
-    slam_params = PathJoinSubstitution(
-        [FindPackageShare("nav_demo"), "config", "mapper_params_online_async.yaml"]
-    )
-    nav2_params = PathJoinSubstitution(
-        [FindPackageShare("nav_demo"), "config", "nav2_params.yaml"]
-    )
-    rviz_config = PathJoinSubstitution(
-        [FindPackageShare("nav_demo"), "rviz", "nav2.rviz"]
-    )
-
-    # ------------------------------------------------------------------
-    # Mode predicates
-    # ------------------------------------------------------------------
-    mode = LaunchConfiguration("mode")
-
-    uses_slam = IfCondition(
-        PythonExpression(["'", mode, "' in ['mapping', 'explore']"])
-    )
-    uses_amcl = IfCondition(
-        PythonExpression(["'", mode, "' == 'navigation'"])
-    )
-    uses_nav2 = IfCondition(
-        PythonExpression(["'", mode, "' in ['navigation', 'explore']"])
-    )
-    run_demo_node = IfCondition(
-        PythonExpression([
-            "'", LaunchConfiguration("goal_source"), "' != 'manual' and '",
-            mode, "' in ['navigation', 'explore']",
-        ])
-    )
-
-    # ------------------------------------------------------------------
-    # Conditional groups
-    # ------------------------------------------------------------------
-    slam_group = GroupAction(
-        condition=uses_slam,
-        actions=[
-            LogInfo(msg="[map_nav] starting SLAM Toolbox"),
-            IncludeLaunchDescription(
-                PythonLaunchDescriptionSource([
-                    PathJoinSubstitution([
-                        FindPackageShare("slam_toolbox"),
-                        "launch",
-                        "online_async_launch.py",
-                    ])
-                ]),
-                launch_arguments={
-                    "use_sim_time": LaunchConfiguration("use_sim_time"),
-                    "slam_params_file": slam_params,
-                }.items(),
-            ),
+    # Nav2 localization (AMCL) 
+    # Tells the robot WHERE it is on the saved map
+    localization = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                FindPackageShare('nav2_bringup'),
+                'launch',
+                'localization_launch.py',
+            ])
+        ]),
+        launch_arguments=[
+            ('map',          map_file),
+            ('use_sim_time', 'true'),
+            ('params_file',  nav2_params),
+            ('autostart',    'true'),
         ],
     )
 
-    amcl_group = GroupAction(
-        condition=uses_amcl,
-        actions=[
-            LogInfo(msg=["[map_nav] starting Nav2 localization (AMCL) on map: ",
-                         LaunchConfiguration("map")]),
-            IncludeLaunchDescription(
-                PythonLaunchDescriptionSource([
-                    PathJoinSubstitution([
-                        FindPackageShare("nav2_bringup"),
-                        "launch",
-                        "localization_launch.py",
-                    ])
-                ]),
-                launch_arguments={
-                    "map": LaunchConfiguration("map"),
-                    "use_sim_time": LaunchConfiguration("use_sim_time"),
-                    "params_file": nav2_params,
-                    "autostart": "true",
-                }.items(),
-            ),
+    # Nav2 navigation stack 
+    # Plans and executes paths to goal poses
+    navigation = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            PathJoinSubstitution([
+                FindPackageShare('nav2_bringup'),
+                'launch',
+                'navigation_launch.py',
+            ])
+        ]),
+        launch_arguments=[
+            ('use_sim_time', 'true'),
+            ('autostart',    'true'),
+            ('params_file',  nav2_params),
         ],
     )
 
-    nav2_group = GroupAction(
-        condition=uses_nav2,
-        actions=[
-            LogInfo(msg="[map_nav] starting Nav2 navigation stack"),
-            IncludeLaunchDescription(
-                PythonLaunchDescriptionSource([
-                    PathJoinSubstitution([
-                        FindPackageShare("nav2_bringup"),
-                        "launch",
-                        "navigation_launch.py",
-                    ])
-                ]),
-                launch_arguments={
-                    "use_sim_time": LaunchConfiguration("use_sim_time"),
-                    "autostart": "true",
-                    "params_file": nav2_params,
-                }.items(),
-            ),
-        ],
-    )
-
-    rviz_group = GroupAction(
-        condition=IfCondition(LaunchConfiguration("rviz")),
-        actions=[
-            Node(
-                package="rviz2",
-                executable="rviz2",
-                name="rviz2",
-                arguments=["-d", rviz_config],
-                parameters=[{"use_sim_time": LaunchConfiguration("use_sim_time")}],
-                output="screen",
-            ),
-        ],
-    )
-
-    demo_node = Node(
-        package="nav_demo",
-        executable="navigation_node_exe",
-        name="navigation_node",
-        output="screen",
+    # Simulated service servers
+    detect_server = Node(
+        package='group2_final',
+        executable='detect_survivor_server_exe',
+        name='detect_survivor_server',
+        output='screen',
         emulate_tty=True,
-        parameters=[{
-            "use_sim_time": LaunchConfiguration("use_sim_time"),
-            "mode": LaunchConfiguration("goal_source"),
-        }],
-        condition=run_demo_node,
+    )
+
+    report_server = Node(
+        package='group2_final',
+        executable='report_survivor_server_exe',
+        name='report_survivor_server',
+        output='screen',
+        emulate_tty=True,
+    )
+
+    # Behavior tree entry point 
+    bt_node = Node(
+        package='group2_final',
+        executable='search_and_rescue_exe',
+        name='search_and_rescue',
+        output='screen',
+        emulate_tty=True,
+        parameters=[mission_params],
+    )
+
+    # Rviz 
+    rviz_node = Node(
+        package='rviz2',
+        executable='rviz2',
+        name='rviz2',
+        arguments=['-d', rviz_config],
+        output='screen',
+        emulate_tty=True,
+        condition=IfCondition(LaunchConfiguration('rviz')),
     )
 
     return LaunchDescription([
-        mode_arg,
-        use_sim_time_arg,
-        map_arg,
         rviz_arg,
-        goal_source_arg,
-        LogInfo(msg=["[map_nav] mode = ", mode]),
-        slam_group,
-        amcl_group,
-        nav2_group,
-        rviz_group,
-        demo_node,
+        localization,    # AMCL first — robot must know where it is
+        navigation,      # then nav stack
+        detect_server,   # service servers
+        report_server,
+        rviz_node,
+        bt_node,         # BT last — needs everything else to be up
     ])
-
