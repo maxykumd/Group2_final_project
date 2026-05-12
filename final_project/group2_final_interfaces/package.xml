@@ -3,7 +3,7 @@
 <package format="3">
   <name>group2_final_interfaces</name>
   <version>0.0.1</version>
-  <description>Custom service interfaces for the group2 final project.</description>
+  <description>Our (Group 2) custom service interfaces for the final project.</description>
 
   <maintainer email="maxyk@umd.edu">maxyk</maintainer>
   <maintainer email="gfacchet@terpmail.umd.edu">namfacchetti</maintainer>  
