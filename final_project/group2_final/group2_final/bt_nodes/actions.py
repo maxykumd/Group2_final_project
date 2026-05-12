@@ -101,10 +101,7 @@ class NavigateToZone(py_trees.behaviour.Behaviour):
                 f"--- Zone {current_idx}/{total}: {zone['id']} "
                 f"({zone['x']:.2f}, {zone['y']:.2f}) ---"
             )
-        self._node.get_logger().info(
-            f"Navigating to {zone['id']} "
-            f"({zone['x']:.2f}, {zone['y']:.2f})..."
-        )
+        self._node.get_logger().info(f"Navigating to {zone['id']}... ")
 
         if not self._client.wait_for_server(timeout_sec=2.0):   # Wait for Nav2 action server (non-blocking safe here)
             self._node.get_logger().error(

@@ -4,6 +4,7 @@
 import rclpy
 import py_trees
 import py_trees_ros
+import time
 
 from rclpy.node import Node
 from rclpy.parameter import Parameter
@@ -39,7 +40,7 @@ def build_tree(zone_manager: ZoneManager) -> py_trees.trees.BehaviourTree:
     # SurvivorFound Sequence : is_detected -> broadcast_tf -> notify_base 
     survivor_found_seq = py_trees.composites.Sequence(
         name="SurvivorFound",
-        memory=False,
+        memory=True,
         children=[is_detected, broadcast_tf, notify_base], # check in order
     )
 
@@ -131,16 +132,15 @@ def main(args: list[str] | None = None) -> None:
 
     # feed AMCL with spawn position with BasicNavigator
     navigator = BasicNavigator(node_name="basic_navigator")
-    # initial_pose = PoseStamped()
-    # initial_pose.header.frame_id = "map"
-    # initial_pose.header.stamp = navigator.get_clock().now().to_msg()
-    # initial_pose.pose.position.x = 0.0
-    # initial_pose.pose.position.y = 0.0
-    # initial_pose.pose.position.z = 0.0
-    # initial_pose.pose.orientation.w = 1.0  # yaw = 0
-    # initial_pose.pose.orientation.z = 0.0
-    # navigator.setInitialPose(initial_pose)
-    import time
+    initial_pose = PoseStamped()
+    initial_pose.header.frame_id = "map"
+    initial_pose.header.stamp = navigator.get_clock().now().to_msg()
+    initial_pose.pose.position.x = 0.0
+    initial_pose.pose.position.y = 0.0
+    initial_pose.pose.position.z = 0.0
+    initial_pose.pose.orientation.w = 1.0  # yaw = 0
+    initial_pose.pose.orientation.z = 0.0
+    navigator.setInitialPose(initial_pose)
     time.sleep(3.0)
     navigator.waitUntilNav2Active()
     read_param_node.get_logger().info("Nav2 is active.")
