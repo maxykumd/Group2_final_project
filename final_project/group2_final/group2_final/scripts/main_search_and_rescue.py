@@ -39,7 +39,7 @@ def build_tree(zone_manager: ZoneManager) -> py_trees.trees.BehaviourTree:
     # SurvivorFound Sequence : is_detected -> broadcast_tf -> notify_base 
     survivor_found_seq = py_trees.composites.Sequence(
         name="SurvivorFound",
-        memory=True,
+        memory=False,
         children=[is_detected, broadcast_tf, notify_base], # check in order
     )
 
@@ -59,12 +59,6 @@ def build_tree(zone_manager: ZoneManager) -> py_trees.trees.BehaviourTree:
                   handle_detection, advance_zone],
     )
 
-    # Wrap patrol in Repeat — keeps running until FAILURE
-    patrol_repeat = py_trees.decorators.Repeat(
-        child=patrol_seq,
-        name="PatrolRepeat",
-        num_success=-1,
-    )
 
     # NavigateToBase OneShot
     navigate_to_base_once = py_trees.decorators.OneShot(
@@ -74,13 +68,13 @@ def build_tree(zone_manager: ZoneManager) -> py_trees.trees.BehaviourTree:
     )
 
     # Root Sequence — patrol until done, THEN go home
-    root = py_trees.composites.Sequence(
+    root = py_trees.composites.Selector(
         name="Mission",
-        memory=True,
-        children=[patrol_repeat, navigate_to_base_once],
+        memory=False,
+        children=[patrol_seq, navigate_to_base_once],
     )
 
-    return root
+    return root, navigate_to_base  
 
 
 def main(args: list[str] | None = None) -> None:
@@ -150,9 +144,10 @@ def main(args: list[str] | None = None) -> None:
     time.sleep(3.0)
     navigator.waitUntilNav2Active()
     read_param_node.get_logger().info("Nav2 is active.")
+    read_param_node.destroy_node()
 
     # Assemble tree 
-    root = build_tree(zone_manager)
+    root, navigate_to_base = build_tree(zone_manager)
 
     # Wrap in py_trees_ros BehaviourTree 
     tree = py_trees_ros.trees.BehaviourTree(root=root,unicode_tree_debug=False,)
@@ -170,7 +165,12 @@ def main(args: list[str] | None = None) -> None:
     tree.tick_tock(period_ms=period_ms)
 
     try:
-        rclpy.spin(tree.node)
+        while rclpy.ok():
+            rclpy.spin_once(tree.node, timeout_sec=0.5)
+            if (navigate_to_base.status == py_trees.common.Status.SUCCESS
+                    and not zone_manager.has_remaining()):
+                tree.node.get_logger().info("Mission complete.")
+                break
     except KeyboardInterrupt:
         pass
     finally:

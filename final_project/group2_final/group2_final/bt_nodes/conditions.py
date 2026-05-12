@@ -29,6 +29,8 @@ class ZonesRemaining(py_trees.behaviour.Behaviour):
         super().__init__(name)
         self._zone_manager = zone_manager   # Reference to the shared ZoneManager for checking remaining zones
         self._node: Optional[Node] = None
+        self._logged: bool = False
+
 
     def setup(self, **kwargs) -> None:
         """
@@ -49,9 +51,9 @@ class ZonesRemaining(py_trees.behaviour.Behaviour):
         if self._zone_manager.has_remaining():   # Check if there are unvisited zones in the ZoneManager
             return Status.SUCCESS
         else:
-            self._node.get_logger().info(   # Log that all zones have been visited and the robot is returning to base
-                "All zones visited. Returning to base."
-            )
+            if not self._logged: # Log that all zones have been visited and the robot is returning to base
+                self._node.get_logger().info("All zones visited. Returning to base.")
+                self._logged = True
             return Status.FAILURE
 
 

@@ -21,7 +21,7 @@ class ReportSurvivorServer(Node):
             "report_survivor",
             self._handle_request
         )
-        self.get_logger().info("ReportSurvivorServer ready.")
+        self.get_logger().info("ReportSurvivor Service ready.")
     
     
     def _handle_request(self,request: ReportSurvivor.Request, response: ReportSurvivor.Response) -> ReportSurvivor.Response:
