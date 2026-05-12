@@ -39,7 +39,7 @@ def build_tree(zone_manager: ZoneManager) -> py_trees.trees.BehaviourTree:
     # SurvivorFound Sequence : is_detected -> broadcast_tf -> notify_base 
     survivor_found_seq = py_trees.composites.Sequence(
         name="SurvivorFound",
-        memory=False,
+        memory=True,
         children=[is_detected, broadcast_tf, notify_base], # check in order
     )
 
@@ -59,19 +59,25 @@ def build_tree(zone_manager: ZoneManager) -> py_trees.trees.BehaviourTree:
                   handle_detection, advance_zone],
     )
 
-    # NavigateToBase OnesShot : send only once
+    # Wrap patrol in Repeat — keeps running until FAILURE
+    patrol_repeat = py_trees.decorators.Repeat(
+        child=patrol_seq,
+        name="PatrolRepeat",
+        num_success=-1,
+    )
+
+    # NavigateToBase OneShot
     navigate_to_base_once = py_trees.decorators.OneShot(
         child=navigate_to_base,
         name="NavigateToBase",
-        policy=py_trees.common.OneShotPolicy.ON_COMPLETION,
+        policy=py_trees.common.OneShotPolicy.ON_SUCCESSFUL_COMPLETION,
     )
 
-
-    #  Root Mission Selector : Patrol until done -> NavigateToBase
-    root = py_trees.composites.Selector(
+    # Root Sequence — patrol until done, THEN go home
+    root = py_trees.composites.Sequence(
         name="Mission",
-        memory=False,
-        children=[patrol_seq, navigate_to_base_once],
+        memory=True,
+        children=[patrol_repeat, navigate_to_base_once],
     )
 
     return root
@@ -131,15 +137,17 @@ def main(args: list[str] | None = None) -> None:
 
     # feed AMCL with spawn position with BasicNavigator
     navigator = BasicNavigator(node_name="basic_navigator")
-    initial_pose = PoseStamped()
-    initial_pose.header.frame_id = "map"
-    initial_pose.header.stamp = navigator.get_clock().now().to_msg()
-    initial_pose.pose.position.x = 0.0
-    initial_pose.pose.position.y = 0.0
-    initial_pose.pose.position.z = 0.0
-    initial_pose.pose.orientation.w = 1.0  # yaw = 0
-    initial_pose.pose.orientation.z = 0.0
-    navigator.setInitialPose(initial_pose)
+    # initial_pose = PoseStamped()
+    # initial_pose.header.frame_id = "map"
+    # initial_pose.header.stamp = navigator.get_clock().now().to_msg()
+    # initial_pose.pose.position.x = 0.0
+    # initial_pose.pose.position.y = 0.0
+    # initial_pose.pose.position.z = 0.0
+    # initial_pose.pose.orientation.w = 1.0  # yaw = 0
+    # initial_pose.pose.orientation.z = 0.0
+    # navigator.setInitialPose(initial_pose)
+    import time
+    time.sleep(3.0)
     navigator.waitUntilNav2Active()
     read_param_node.get_logger().info("Nav2 is active.")
 

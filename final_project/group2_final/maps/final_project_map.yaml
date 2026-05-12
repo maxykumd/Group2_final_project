@@ -1,4 +1,4 @@
-image: final_project_map.pgm
+image: /home/maxz/enpm605_ws/install/group2_final/share/group2_final/maps/final_project_map.pgm
 mode: trinary
 resolution: 0.050
 origin: [-6.036, -5.048, 0]

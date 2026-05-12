@@ -48,7 +48,7 @@ class ReportSurvivorServer(Node):
                 f"Expected frame 'map' but received '{frame}'. ")
         else:
             self.get_logger().info(
-                f"Report received: survivor_{survivor_id} at (-x={x:.3f}, y={y:.3f}). Acknowledged."
+                f"Report received: {survivor_id} at (-x={x:.3f}, y={y:.3f}). Acknowledged."
 )
 
         response.acknowledged = True

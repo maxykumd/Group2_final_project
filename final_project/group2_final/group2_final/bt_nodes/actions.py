@@ -63,6 +63,8 @@ class NavigateToZone(py_trees.behaviour.Behaviour):
 
         self._done: bool = False   # Whether navigation has completed (success or failure)
         self._success: bool = False   # Whether navigation succeeded (reached goal)
+        self._retry_count: int = 0
+        self._max_retries: int = 5
 
     def setup(self, **kwargs) -> None:
         """
@@ -93,7 +95,12 @@ class NavigateToZone(py_trees.behaviour.Behaviour):
         self._goal_handle = None
 
         zone = self._zone_manager.current_zone()
-
+        total = self._zone_manager.total_zones()
+        current_idx = self._zone_manager.current_index() + 1
+        self._node.get_logger().info(
+                f"--- Zone {current_idx}/{total}: {zone['id']} "
+                f"({zone['x']:.2f}, {zone['y']:.2f}) ---"
+            )
         self._node.get_logger().info(
             f"Navigating to {zone['id']} "
             f"({zone['x']:.2f}, {zone['y']:.2f})..."
@@ -147,6 +154,7 @@ class NavigateToZone(py_trees.behaviour.Behaviour):
 
             result = self._result_future.result()   # Get the result of the navigation goal and check the status code to determine success or failure
             status = result.status   # Nav2 status code for the navigation result
+            
 
             if status == GoalStatus.STATUS_SUCCEEDED:
                 zone = self._zone_manager.current_zone()   # Get the current zone info for logging
@@ -157,12 +165,32 @@ class NavigateToZone(py_trees.behaviour.Behaviour):
                 self._done = True   # Mark as done to prevent further processing
                 return Status.SUCCESS
             else:
-                self._node.get_logger().error(
-                    f"Navigation failed with status: {status}"
-                )
-                self._success = False   # Mark navigation as failed and done
-                self._done = True   # Mark as done to prevent further processing
-                return Status.FAILURE
+                self._retry_count += 1
+                # self._node.get_logger().warn(
+                #     f"Navigation failed with status: {status}. "
+                #     f"Retry {self._retry_count}/{self._max_retries}"
+                # )
+                if self._retry_count < self._max_retries:
+                    # Reset and try again
+                    self._done = False
+                    self._goal_handle = None
+                    self._result_future = None
+                    self._goal_future = None
+                    # Re-send the goal
+                    goal_msg = NavigateToPose.Goal()
+                    zone = self._zone_manager.current_zone()
+                    goal_msg.pose = self._build_pose_stamped(
+                        zone["x"], zone["y"], zone["yaw"]
+                    )
+                    self._goal_future = self._client.send_goal_async(
+                        goal_msg, feedback_callback=None
+                    )
+                    return Status.RUNNING
+                else:
+                    self._retry_count = 0
+                    self._success = False
+                    self._done = True
+                    return Status.FAILURE
 
         return Status.RUNNING
 
@@ -248,6 +276,7 @@ class NavigateToBase(py_trees.behaviour.Behaviour):
 
         self._done: bool = False   # Whether navigation has completed (success or failure)
         self._success: bool = False   # Whether navigation succeeded (reached base)
+        self._retry_count = 0
 
     def setup(self, **kwargs) -> None:
         """
@@ -335,16 +364,13 @@ class NavigateToBase(py_trees.behaviour.Behaviour):
             status = result.status   # Nav2 status code for the navigation result
 
             if status == GoalStatus.STATUS_SUCCEEDED: # SUCCESS
-                self._node.get_logger().info(
-                    "Reached base station."
-                )
+                self._node.get_logger().info("Reached base station.")
+                self._node.get_logger().info("Mission complete.")
                 self._success = True   # Mark navigation as successful and done
                 self._done = True   # Mark as done to prevent further processing
                 return Status.SUCCESS
             else:
-                self._node.get_logger().error(
-                    f"Base navigation failed with status: {status}"
-                )
+                self._node.get_logger().error(f"Base navigation failed with status: {status}")
                 self._success = False   # Mark navigation as failed and done
                 self._done = True   # Mark as done to prevent further processing
                 return Status.FAILURE
@@ -360,13 +386,8 @@ class NavigateToBase(py_trees.behaviour.Behaviour):
         Args:
             new_status (Status): The new status.
         """
-        if (
-            self._goal_handle is not None   # Active goal handle exists
-            and not self._done
-        ):
-            self._node.get_logger().warn(
-                "Cancelling base navigation goal..."
-            )
+        if (self._goal_handle is not None and not self._done): # Active goal handle exists
+            self._node.get_logger().warn("Cancelling base navigation goal...")
             self._goal_handle.cancel_goal_async()   # Cancel the goal asynchronously to avoid blocking the BT tick loop
 
     def _build_pose_stamped(
@@ -466,10 +487,11 @@ class DetectSurvivor(py_trees.behaviour.Behaviour):
                 return py_trees.common.Status.RUNNING
             else: 
                 zone_id = self._zone_manager.current_zone()['id']
+                self._node.get_logger().info(f"Calling detect_survivor for {zone_id}...")
+
                 request = DetectSurvivorSrv.Request()
                 request.zone_id = zone_id
                 self._future = self._client.call_async(request)
-                self._node.get_logger().info(f"DetectSurvivor: called service for '{zone_id}'")
                 return py_trees.common.Status.RUNNING # running and waiting for response
         
         # 2nd tick : poll until server response and done
@@ -614,9 +636,10 @@ class BroadcastSurvivorTF(py_trees.behaviour.Behaviour):
         
         self._broadcaster.sendTransform(t)
         self._last_survivor_id = survivor_id
-        self._node.get_logger().info(f"BroadcastSurvivorTF: published '{survivor_id}' at ({sx:.3f}, {sy:.3f})")
+        self._node.get_logger().info("Survivor detected at zone!")
+        self._node.get_logger().info(f"Broadcasting TF frame: {survivor_id} at ({sx:.2f}, {sy:.2f}) in map frame.")        
         return py_trees.common.Status.SUCCESS
-    
+            
     def terminate(self, new_status: py_trees.common.Status) -> None:
         """No cleanup needed for this node."""
         pass
@@ -698,7 +721,7 @@ class NotifyBase(py_trees.behaviour.Behaviour):
             request.location = location
 
             self._future = self._client.call_async(request)
-            self._node.get_logger().info(f"NotifyBase: reporting '{request.survivor_id}' at ({x:.2f}, {y:.2f})")
+            self._node.get_logger().info(f"Reporting {survivor_id} to base...")
             return py_trees.common.Status.RUNNING # running and waiting for response
         
         # 2nd tick : poll until server response and done
@@ -715,7 +738,8 @@ class NotifyBase(py_trees.behaviour.Behaviour):
         if not response.acknowledged: # server said "not acknowledged"
             return py_trees.common.Status.FAILURE
 
-        self._node.get_logger().info("NotifyBase: command center acknowledged")
+        self._node.get_logger().info(f"Base acknowledged {self._detect_node.survivor_id()}.")
+
         return py_trees.common.Status.SUCCESS
         
     def terminate(self, new_status: py_trees.common.Status) -> None:

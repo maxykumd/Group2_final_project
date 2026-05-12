@@ -45,11 +45,11 @@ class DetectSurvivorServer(Node):
             response.found = True
             response.survivor_x = x
             response.survivor_y = y
-            self.get_logger().info(f"Detection requested for zone_{zone_id}: FOUND at ({x:.2f}, {y:.2f})")
+            self.get_logger().info(f"Detection requested for {zone_id}: FOUND at ({x:.2f}, {y:.2f})")
         else:
             response.found = False
             response.survivor_x = 0.0
             response.survivor_y = 0.0
-            self.get_logger().info(f"Detection requested for zone_{zone_id}: NOT FOUND")
+            self.get_logger().info(f"Detection requested for {zone_id}: NOT FOUND")
         
         return response

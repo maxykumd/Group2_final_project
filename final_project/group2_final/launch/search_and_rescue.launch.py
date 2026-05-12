@@ -77,6 +77,7 @@ def generate_launch_description() -> LaunchDescription:
             ('use_sim_time', 'true'),
             ('autostart',    'true'),
             ('params_file',  nav2_params),
+            ('log_level',    'error'),
         ],
     )
 
