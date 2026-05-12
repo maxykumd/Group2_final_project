@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 import os 
-import glob
+from glob import glob
 
 package_name = 'group2_final'
 
@@ -40,9 +40,9 @@ setup(
         'console_scripts': [
             # BT entry point
             'search_and_rescue_exe = group2_final.scripts.main_search_and_rescue:main',
-            # Service servers (Student A)
-            'detect_survivor_server_exe = group2_final.service_servers.detect_survivor_server:main',
-            'report_survivor_server_exe = group2_final.service_servers.report_survivor_server:main',
+            # Service servers 
+            'detect_survivor_server_exe = group2_final.scripts.main_detect_survivor_server:main',
+            'report_survivor_server_exe = group2_final.scripts.main_report_survivor_server:main',
         ],
     },
 )

@@ -20,6 +20,7 @@ from nav2_msgs.action import NavigateToPose
 from tf2_ros import StaticTransformBroadcaster
 
 from group2_final.zone_manager import ZoneManager
+from action_msgs.msg import GoalStatus
 
 class NavigateToZone(py_trees.behaviour.Behaviour):
     """
@@ -111,8 +112,10 @@ class NavigateToZone(py_trees.behaviour.Behaviour):
             zone["x"], zone["y"], zone["yaw"]
         )
 
-        self._goal_future = self._client.send_goal_async(goal_msg)   # Send the goal asynchronously
-
+        self._goal_future = self._client.send_goal_async(
+            goal_msg,
+            feedback_callback=None
+        )
     def update(self) -> Status:
         """
         Called on every behavior tree tick.
@@ -145,7 +148,7 @@ class NavigateToZone(py_trees.behaviour.Behaviour):
             result = self._result_future.result()   # Get the result of the navigation goal and check the status code to determine success or failure
             status = result.status   # Nav2 status code for the navigation result
 
-            if status == 4:   # SUCCEEDED
+            if status == GoalStatus.STATUS_SUCCEEDED:
                 zone = self._zone_manager.current_zone()   # Get the current zone info for logging
                 self._node.get_logger().info(
                     f"Reached {zone['id']}."
@@ -293,8 +296,10 @@ class NavigateToBase(py_trees.behaviour.Behaviour):
             base["x"], base["y"], base["yaw"]
         )
 
-        self._goal_future = self._client.send_goal_async(goal_msg)   # Send the goal asynchronously to avoid blocking the BT tick loop
-
+        self._goal_future = self._client.send_goal_async(
+            goal_msg,
+            feedback_callback=None
+        )
     def update(self) -> Status:
         """
         Called on every BT tick.
@@ -329,7 +334,7 @@ class NavigateToBase(py_trees.behaviour.Behaviour):
             result = self._result_future.result()   # Get the result of the navigation goal and check the status code to determine success or failure
             status = result.status   # Nav2 status code for the navigation result
 
-            if status == 4:   # SUCCESS
+            if status == GoalStatus.STATUS_SUCCEEDED: # SUCCESS
                 self._node.get_logger().info(
                     "Reached base station."
                 )

@@ -104,7 +104,7 @@ def generate_launch_description() -> LaunchDescription:
         name='search_and_rescue',
         output='screen',
         emulate_tty=True,
-        parameters=[mission_params],
+        parameters=[mission_params, {'tick_rate_hz': LaunchConfiguration('tick_rate_hz')}],
     )
 
     # Rviz 
@@ -118,8 +118,15 @@ def generate_launch_description() -> LaunchDescription:
         condition=IfCondition(LaunchConfiguration('rviz')),
     )
 
+    tick_rate_arg = DeclareLaunchArgument(
+        'tick_rate_hz',
+        default_value='2.0',
+        description='Behavior tree tick rate in Hz.',
+    )
+    
     return LaunchDescription([
         rviz_arg,
+        tick_rate_arg,
         localization,    # AMCL first — robot must know where it is
         navigation,      # then nav stack
         detect_server,   # service servers
