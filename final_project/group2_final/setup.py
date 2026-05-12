@@ -29,7 +29,7 @@ setup(
     zip_safe=True,
     maintainer='maxykumd , namfacchetti',
     maintainer_email='maxyk@umd.edu, gfacchet@terpmail.umd.edu',
-    description='TODO: Package description',
+    description='Our (Group 2) ROS2 package for the final project.',
     license='Apache-2.0',
     extras_require={
         'test': [

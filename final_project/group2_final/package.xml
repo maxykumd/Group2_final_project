@@ -3,9 +3,10 @@
 <package format="3">
   <name>group2_final</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
-  <maintainer email="maxyk@umd.edu">maxz</maintainer>
-  <license>TODO: License declaration</license>
+  <description>Our (Group 2) ROS2 package for the final project.</description>
+  <maintainer email="maxyk@umd.edu">maxyk</maintainer>
+  <maintainer email="gfacchet@terpmail.umd.edu">namfacchetti</maintainer>  
+  <license>Apache-2.0</license>
 
   <depend>rclpy</depend>
   <depend>py_trees</depend>
