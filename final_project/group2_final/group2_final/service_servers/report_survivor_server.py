@@ -2,6 +2,7 @@
 
 from rclpy.node import Node
 from group2_final_interfaces.srv import ReportSurvivor
+import rclpy
 
 
 class ReportSurvivorServer(Node):
@@ -17,14 +18,13 @@ class ReportSurvivorServer(Node):
         super().__init__("report_survivor_server")
 
         self._srv = self.create_service(
-            ReportSurvivor,
-            "report_survivor",
-            self._handle_request
+            ReportSurvivor, "report_survivor", self._handle_request
         )
         self.get_logger().info("ReportSurvivor Service ready.")
-    
-    
-    def _handle_request(self,request: ReportSurvivor.Request, response: ReportSurvivor.Response) -> ReportSurvivor.Response:
+
+    def _handle_request(
+        self, request: ReportSurvivor.Request, response: ReportSurvivor.Response
+    ) -> ReportSurvivor.Response:
         """Handle a ReportSurvivor service request.
 
         Logs the survivor_id, frame_id, and coordinates. Warns if
@@ -44,10 +44,23 @@ class ReportSurvivorServer(Node):
         y = request.location.point.y
 
         if frame != "map":
-            self.get_logger().warn(
-                f"Expected frame 'map' but received '{frame}'. ")
+            self.get_logger().warn(f"Expected frame 'map' but received '{frame}'. ")
         else:
-            f"Report received: {survivor_id} at ({x:.2f}, {y:.2f}). Acknowledged."
+            self.get_logger().info(
+                f"Report received: {survivor_id} at ({x:.2f}, {y:.2f}). Acknowledged."
+            )
 
         response.acknowledged = True
         return response
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = ReportSurvivorServer()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.try_shutdown()

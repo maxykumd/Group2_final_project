@@ -3,6 +3,7 @@
 
 from typing import List, Dict
 
+
 class ZoneManager:
     """
     Manages the mission state for the search-and-rescue task.
@@ -36,15 +37,21 @@ class ZoneManager:
                     "yaw": float
                 }
         """
-        if not zones:   # Ensure that there is at least one zone to manage
+        if not zones:  # Ensure that there is at least one zone to manage
             raise ValueError("ZoneManager requires at least one zone.")
 
-        self._zones: List[Dict] = zones   # List of zones to be searched, each with an ID and pose information
-        self._base_station: Dict = base_station   # Pose of the base station for return after mission completion
+        self._zones: List[Dict] = (
+            zones  # List of zones to be searched, each with an ID and pose information
+        )
+        self._base_station: Dict = (
+            base_station  # Pose of the base station for return after mission completion
+        )
 
-        self._current_index: int = 0   # Index of the current active zone in the zones list
+        self._current_index: int = (
+            0  # Index of the current active zone in the zones list
+        )
 
-        self._survivor_count: int = 0   # Counter for generating unique survivor IDs
+        self._survivor_count: int = 0  # Counter for generating unique survivor IDs
 
     def current_zone(self) -> Dict:
         """
@@ -54,10 +61,14 @@ class ZoneManager:
             Dict: The current zone dictionary with keys:
                 "id", "x", "y", "yaw"
         """
-        if not self.has_remaining():   # Guard against accessing a zone when there are no remaining zones
+        if (
+            not self.has_remaining()
+        ):  # Guard against accessing a zone when there are no remaining zones
             raise IndexError("No remaining zones. Cannot access current zone.")
 
-        return self._zones[self._current_index]   # Return the current zone based on the internal index
+        return self._zones[
+            self._current_index
+        ]  # Return the current zone based on the internal index
 
     def has_remaining(self) -> bool:
         """
@@ -97,7 +108,9 @@ class ZoneManager:
         Returns:
             str: A unique identifier in the format "survivor_N"
         """
-        self._survivor_count += 1   # Increment the survivor count for each detected survivor
+        self._survivor_count += (
+            1  # Increment the survivor count for each detected survivor
+        )
         return f"survivor_{self._survivor_count}"
 
     def total_zones(self) -> int:
@@ -118,18 +131,33 @@ class ZoneManager:
         """
         return self._current_index
 
+
 if __name__ == "__main__":
     zones = [
-        {"id": "zone_a", "x": 0, "y": 0, "yaw": 0},   # Define the first zone with its ID and pose
-        {"id": "zone_b", "x": 1, "y": 1, "yaw": 0},   # Define the second zone with its ID and pose
+        {
+            "id": "zone_a",
+            "x": 0,
+            "y": 0,
+            "yaw": 0,
+        },  # Define the first zone with its ID and pose
+        {
+            "id": "zone_b",
+            "x": 1,
+            "y": 1,
+            "yaw": 0,
+        },  # Define the second zone with its ID and pose
     ]
-    base = {"x": 0, "y": 0, "yaw": 0}   # Define the base station pose
+    base = {"x": 0, "y": 0, "yaw": 0}  # Define the base station pose
 
-    zm = ZoneManager(zones, base)   # Create an instance of ZoneManager with the defined zones and base station
+    zm = ZoneManager(
+        zones, base
+    )  # Create an instance of ZoneManager with the defined zones and base station
 
-    while zm.has_remaining():   # Loop through the zones as long as there are unvisited zones remaining
+    while (
+        zm.has_remaining()
+    ):  # Loop through the zones as long as there are unvisited zones remaining
         print(zm.current_zone())
-        zm.advance()   # Advance to the next zone after printing the current zone information
+        zm.advance()  # Advance to the next zone after printing the current zone information
 
-    print(zm.next_survivor_id())   # Generate and print the survivor ID
+    print(zm.next_survivor_id())  # Generate and print the survivor ID
     print(zm.next_survivor_id())

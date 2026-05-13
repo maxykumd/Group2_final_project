@@ -133,5 +133,5 @@ def generate_launch_description() -> LaunchDescription:
         detect_server,   # service servers
         report_server,
         rviz_node,
-        bt_node,         # BT last — needs everything else to be up
+        bt_node,         # BT last — needs everything else to be up first
     ])

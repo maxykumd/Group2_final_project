@@ -22,6 +22,7 @@ from tf2_ros import StaticTransformBroadcaster
 from group2_final.zone_manager import ZoneManager
 from action_msgs.msg import GoalStatus
 
+
 class NavigateToZone(py_trees.behaviour.Behaviour):
     """
     Behavior Tree action node that sends a Nav2 NavigateToPose goal
@@ -52,17 +53,21 @@ class NavigateToZone(py_trees.behaviour.Behaviour):
             zone_manager (ZoneManager): Shared zone manager instance.
         """
         super().__init__(name)
-        self._zone_manager = zone_manager   # Reference to the shared ZoneManager for accessing the current zone
+        self._zone_manager = zone_manager  # Reference to the shared ZoneManager for accessing the current zone
 
-        self._node: Optional[Node] = None   # ROS node will be injected in setup()
-        self._client: Optional[ActionClient] = None   # Nav2 ActionClient will be created in setup()
+        self._node: Optional[Node] = None  # ROS node will be injected in setup()
+        self._client: Optional[ActionClient] = (
+            None  # Nav2 ActionClient will be created in setup()
+        )
 
-        self._goal_future = None   # Future for the goal request
-        self._result_future = None   # Future for the result of the goal
-        self._goal_handle = None   # Handle for the active goal
+        self._goal_future = None  # Future for the goal request
+        self._result_future = None  # Future for the result of the goal
+        self._goal_handle = None  # Handle for the active goal
 
-        self._done: bool = False   # Whether navigation has completed (success or failure)
-        self._success: bool = False   # Whether navigation succeeded (reached goal)
+        self._done: bool = (
+            False  # Whether navigation has completed (success or failure)
+        )
+        self._success: bool = False  # Whether navigation succeeded (reached goal)
         self._retry_count: int = 0
         self._max_retries: int = 5
 
@@ -72,13 +77,11 @@ class NavigateToZone(py_trees.behaviour.Behaviour):
 
         Creates the Nav2 ActionClient.
         """
-        self._node = kwargs["node"]   # Get the ROS node from the setup kwargs (injected by the BT framework)
+        self._node = kwargs[
+            "node"
+        ]  # Get the ROS node from the setup kwargs (injected by the BT framework)
 
-        self._client = ActionClient(
-            self._node,
-            NavigateToPose,
-            "navigate_to_pose"
-        )
+        self._client = ActionClient(self._node, NavigateToPose, "navigate_to_pose")
 
         self._node.get_logger().info("NavigateToZone node setup complete.")
 
@@ -98,28 +101,30 @@ class NavigateToZone(py_trees.behaviour.Behaviour):
         total = self._zone_manager.total_zones()
         current_idx = self._zone_manager.current_index() + 1
         self._node.get_logger().info(
-                f"--- Zone {current_idx}/{total}: {zone['id']} "
-                f"({zone['x']:.2f}, {zone['y']:.2f}) ---"
-            )
+            f"--- Zone {current_idx}/{total}: {zone['id']} "
+            f"({zone['x']:.2f}, {zone['y']:.2f}) ---"
+        )
         self._node.get_logger().info(f"Navigating to {zone['id']}... ")
 
-        if not self._client.wait_for_server(timeout_sec=2.0):   # Wait for Nav2 action server (non-blocking safe here)
-            self._node.get_logger().error(
-                "NavigateToPose action server not available!"
-            )
+        if not self._client.wait_for_server(
+            timeout_sec=2.0
+        ):  # Wait for Nav2 action server (non-blocking safe here)
+            self._node.get_logger().error("NavigateToPose action server not available!")
             self._done = True
             self._success = False
             return
 
-        goal_msg = NavigateToPose.Goal()   # Populate the goal message with the target pose from the zone manager
-        goal_msg.pose = self._build_pose_stamped(   # Helper function to convert zone coordinates to PoseStamped
+        goal_msg = (
+            NavigateToPose.Goal()
+        )  # Populate the goal message with the target pose from the zone manager
+        goal_msg.pose = self._build_pose_stamped(  # Helper function to convert zone coordinates to PoseStamped
             zone["x"], zone["y"], zone["yaw"]
         )
 
         self._goal_future = self._client.send_goal_async(
-            goal_msg,
-            feedback_callback=None
+            goal_msg, feedback_callback=None
         )
+
     def update(self) -> Status:
         """
         Called on every behavior tree tick.
@@ -127,67 +132,52 @@ class NavigateToZone(py_trees.behaviour.Behaviour):
         Returns:
             Status: RUNNING, SUCCESS, or FAILURE depending on navigation state.
         """
-        if self._goal_future is None:   # If goal hasn't been sent yet (edge case)
+        if self._goal_future is None:  # If goal hasn't been sent yet (edge case)
             return Status.RUNNING
 
-        if self._goal_handle is None:   # Check for if the goal has been sent and accepted but we don't have a handle yet
+        if (
+            self._goal_handle is None
+        ):  # Check for if the goal has been sent and accepted but we don't have a handle yet
             if not self._goal_future.done():
                 return Status.RUNNING
 
             self._goal_handle = self._goal_future.result()
 
-            if not self._goal_handle.accepted:   # Check if the goal was accepted by Nav2
+            if not self._goal_handle.accepted:  # Check if the goal was accepted by Nav2
                 self._node.get_logger().error("Navigation goal rejected!")
                 self._done = True
                 self._success = False
                 return Status.FAILURE
 
-            self._result_future = self._goal_handle.get_result_async()   # Request result asynchronously, goal accepted, now wait for the result
+            self._result_future = (
+                self._goal_handle.get_result_async()
+            )  # Request result asynchronously, goal accepted, now wait for the result
             return Status.RUNNING
 
-        if self._result_future is not None:   # Check if we have a result future to wait on (should be set if goal was accepted)
+        if (
+            self._result_future is not None
+        ):  # Check if we have a result future to wait on (should be set if goal was accepted)
             if not self._result_future.done():
                 return Status.RUNNING
 
-            result = self._result_future.result()   # Get the result of the navigation goal and check the status code to determine success or failure
-            status = result.status   # Nav2 status code for the navigation result
-            
+            result = self._result_future.result()  # Get the result of the navigation goal and check the status code to determine success or failure
+            status = result.status  # Nav2 status code for the navigation result
 
-            if status == GoalStatus.STATUS_SUCCEEDED:
-                zone = self._zone_manager.current_zone()   # Get the current zone info for logging
-                self._node.get_logger().info(
-                    f"Reached {zone['id']}."
-                )
-                self._success = True   # Mark navigation as successful and done
-                self._done = True   # Mark as done to prevent further processing
+            if status == 4:  # SUCCEEDED
+                zone = (
+                    self._zone_manager.current_zone()
+                )  # Get the current zone info for logging
+                self._node.get_logger().info(f"Reached {zone['id']}.")
+                self._success = True  # Mark navigation as successful and done
+                self._done = True  # Mark as done to prevent further processing
                 return Status.SUCCESS
             else:
-                self._retry_count += 1
-                # self._node.get_logger().warn(
-                #     f"Navigation failed with status: {status}. "
-                #     f"Retry {self._retry_count}/{self._max_retries}"
-                # )
-                if self._retry_count < self._max_retries:
-                    # Reset and try again
-                    self._done = False
-                    self._goal_handle = None
-                    self._result_future = None
-                    self._goal_future = None
-                    # Re-send the goal
-                    goal_msg = NavigateToPose.Goal()
-                    zone = self._zone_manager.current_zone()
-                    goal_msg.pose = self._build_pose_stamped(
-                        zone["x"], zone["y"], zone["yaw"]
-                    )
-                    self._goal_future = self._client.send_goal_async(
-                        goal_msg, feedback_callback=None
-                    )
-                    return Status.RUNNING
-                else:
-                    self._retry_count = 0
-                    self._success = False
-                    self._done = True
-                    return Status.FAILURE
+                self._node.get_logger().error(
+                    f"Navigation failed with status: {status}"
+                )
+                self._success = False  # Mark navigation as failed and done
+                self._done = True  # Mark as done to prevent further processing
+                return Status.FAILURE
 
         return Status.RUNNING
 
@@ -201,17 +191,13 @@ class NavigateToZone(py_trees.behaviour.Behaviour):
             new_status (Status): The new status after termination.
         """
         if (
-            self._goal_handle is not None   # Active goal handle
-            and not self._done   # Navigation is not already marked as done (success or failure)
+            self._goal_handle is not None  # Active goal handle
+            and not self._done  # Navigation is not already marked as done (success or failure)
         ):
-            self._node.get_logger().warn(
-                "Cancelling active navigation goal..."
-            )
-            self._goal_handle.cancel_goal_async()   # Cancel the goal asynchronously to avoid blocking the BT tick loop
+            self._node.get_logger().warn("Cancelling active navigation goal...")
+            self._goal_handle.cancel_goal_async()  # Cancel the goal asynchronously to avoid blocking the BT tick loop
 
-    def _build_pose_stamped(
-        self, x: float, y: float, yaw: float
-    ) -> PoseStamped:
+    def _build_pose_stamped(self, x: float, y: float, yaw: float) -> PoseStamped:
         """
         Construct a PoseStamped message for Nav2.
 
@@ -227,18 +213,25 @@ class NavigateToZone(py_trees.behaviour.Behaviour):
         pose.header.frame_id = "map"
         pose.header.stamp = self._node.get_clock().now().to_msg()
 
-        pose.pose.position.x = x   # Set the position from the zone manager's current zone coordinates
-        pose.pose.position.y = y   
-        pose.pose.position.z = 0.0   # Assuming flat ground, z is 0
+        pose.pose.position.x = (
+            x  # Set the position from the zone manager's current zone coordinates
+        )
+        pose.pose.position.y = y
+        pose.pose.position.z = 0.0  # Assuming flat ground, z is 0
 
-        qz = math.sin(yaw / 2.0)   # Convert yaw to quaternion (assuming roll=pitch=0)
-        qw = math.cos(yaw / 2.0)   # Quaternion for yaw rotation only
+        qz = math.sin(yaw / 2.0)  # Convert yaw to quaternion (assuming roll=pitch=0)
+        qw = math.cos(yaw / 2.0)  # Quaternion for yaw rotation only
 
-        pose.pose.orientation.z = qz   # Set the orientation from the zone manager's current zone yaw
-        pose.pose.orientation.w = qw   # Set the orientation w component for the quaternion
+        pose.pose.orientation.z = (
+            qz  # Set the orientation from the zone manager's current zone yaw
+        )
+        pose.pose.orientation.w = (
+            qw  # Set the orientation w component for the quaternion
+        )
 
         return pose
-    
+
+
 class NavigateToBase(py_trees.behaviour.Behaviour):
     """
     Behavior Tree action node that sends a Nav2 NavigateToPose goal
@@ -262,17 +255,21 @@ class NavigateToBase(py_trees.behaviour.Behaviour):
             zone_manager (ZoneManager): Shared zone manager instance.
         """
         super().__init__(name)
-        self._zone_manager = zone_manager   # Reference to the shared ZoneManager for accessing the base station pose
+        self._zone_manager = zone_manager  # Reference to the shared ZoneManager for accessing the base station pose
 
-        self._node: Optional[Node] = None   # ROS node will be injected in setup()
-        self._client: Optional[ActionClient] = None   # Nav2 ActionClient will be created in setup()
+        self._node: Optional[Node] = None  # ROS node will be injected in setup()
+        self._client: Optional[ActionClient] = (
+            None  # Nav2 ActionClient will be created in setup()
+        )
 
-        self._goal_future = None   # Future for the goal request
-        self._result_future = None   # Future for the result of the goal
-        self._goal_handle = None   # Handle for the active goal
+        self._goal_future = None  # Future for the goal request
+        self._result_future = None  # Future for the result of the goal
+        self._goal_handle = None  # Handle for the active goal
 
-        self._done: bool = False   # Whether navigation has completed (success or failure)
-        self._success: bool = False   # Whether navigation succeeded (reached base)
+        self._done: bool = (
+            False  # Whether navigation has completed (success or failure)
+        )
+        self._success: bool = False  # Whether navigation succeeded (reached base)
         self._retry_count = 0
 
     def setup(self, **kwargs) -> None:
@@ -281,12 +278,14 @@ class NavigateToBase(py_trees.behaviour.Behaviour):
 
         Creates the Nav2 ActionClient.
         """
-        self._node = kwargs["node"]   # Get the ROS node from the setup kwargs (injected by the BT framework)
+        self._node = kwargs[
+            "node"
+        ]  # Get the ROS node from the setup kwargs (injected by the BT framework)
 
-        self._client = ActionClient(   # Create the ActionClient for NavigateToPose using the node
-            self._node,
-            NavigateToPose,
-            "navigate_to_pose"
+        self._client = (
+            ActionClient(  # Create the ActionClient for NavigateToPose using the node
+                self._node, NavigateToPose, "navigate_to_pose"
+            )
         )
 
         self._node.get_logger().info("NavigateToBase node setup complete.")
@@ -297,33 +296,41 @@ class NavigateToBase(py_trees.behaviour.Behaviour):
 
         Sends a navigation goal to the base station.
         """
-        self._done = False   # Reset done and success flags for this new activation
-        self._success = False   # Reset success flag
-        self._goal_future = None   # Reset goal and result futures and handle for this new activation
-        self._result_future = None   # Reset result future
-        self._goal_handle = None   # Reset goal handle
+        self._done = False  # Reset done and success flags for this new activation
+        self._success = False  # Reset success flag
+        self._goal_future = (
+            None  # Reset goal and result futures and handle for this new activation
+        )
+        self._result_future = None  # Reset result future
+        self._goal_handle = None  # Reset goal handle
 
-        base = self._zone_manager.base_pose()   # Get the base station pose from the zone manager
+        base = (
+            self._zone_manager.base_pose()
+        )  # Get the base station pose from the zone manager
 
         self._node.get_logger().info("Navigating to base station...")
 
-        if not self._client.wait_for_server(timeout_sec=2.0):   # Wait for Nav2 action server (non-blocking safe here, only runs once on initialise)
-            self._node.get_logger().error(
-                "NavigateToPose action server not available!"
+        if not self._client.wait_for_server(
+            timeout_sec=2.0
+        ):  # Wait for Nav2 action server (non-blocking safe here, only runs once on initialise)
+            self._node.get_logger().error("NavigateToPose action server not available!")
+            self._done = (
+                True  # Mark as done to prevent further attempts, set success to False
             )
-            self._done = True   # Mark as done to prevent further attempts, set success to False
-            self._success = False   # Set success to False since we can't navigate without the action server
+            self._success = False  # Set success to False since we can't navigate without the action server
             return
 
-        goal_msg = NavigateToPose.Goal()   # Create the goal message and populate it with the base station pose
-        goal_msg.pose = self._build_pose_stamped(   # Helper function to convert base station coordinates to PoseStamped
+        goal_msg = (
+            NavigateToPose.Goal()
+        )  # Create the goal message and populate it with the base station pose
+        goal_msg.pose = self._build_pose_stamped(  # Helper function to convert base station coordinates to PoseStamped
             base["x"], base["y"], base["yaw"]
         )
 
         self._goal_future = self._client.send_goal_async(
-            goal_msg,
-            feedback_callback=None
+            goal_msg, feedback_callback=None
         )
+
     def update(self) -> Status:
         """
         Called on every BT tick.
@@ -331,42 +338,52 @@ class NavigateToBase(py_trees.behaviour.Behaviour):
         Returns:
             Status: RUNNING, SUCCESS, or FAILURE.
         """
-        if self._goal_future is None:   # If goal hasn't been sent yet
+        if self._goal_future is None:  # If goal hasn't been sent yet
             return Status.RUNNING
 
-        if self._goal_handle is None:   # Check if the goal has been sent and accepted but we don't have a handle yet
+        if (
+            self._goal_handle is None
+        ):  # Check if the goal has been sent and accepted but we don't have a handle yet
             if not self._goal_future.done():
                 return Status.RUNNING
 
-            self._goal_handle = self._goal_future.result()   # Get the goal handle from the future result
+            self._goal_handle = (
+                self._goal_future.result()
+            )  # Get the goal handle from the future result
 
-            if not self._goal_handle.accepted:   # Check if the goal was accepted by Nav2, if not log error and mark as done with failure
-                self._node.get_logger().error(
-                    "Base navigation goal rejected!"
+            if not self._goal_handle.accepted:  # Check if the goal was accepted by Nav2, if not log error and mark as done with failure
+                self._node.get_logger().error("Base navigation goal rejected!")
+                self._done = True  # Mark as done to prevent further attempts, set success to False
+                self._success = (
+                    False  # Set success to False since the goal was rejected
                 )
-                self._done = True   # Mark as done to prevent further attempts, set success to False
-                self._success = False   # Set success to False since the goal was rejected
                 return Status.FAILURE
 
-            self._result_future = self._goal_handle.get_result_async()   # Request result asynchronously, goal accepted, now wait for the result
+            self._result_future = (
+                self._goal_handle.get_result_async()
+            )  # Request result asynchronously, goal accepted, now wait for the result
             return Status.RUNNING
 
-        if self._result_future is not None:   # Check if we have a result future to wait on (should be set if goal was accepted)
+        if (
+            self._result_future is not None
+        ):  # Check if we have a result future to wait on (should be set if goal was accepted)
             if not self._result_future.done():
                 return Status.RUNNING
 
-            result = self._result_future.result()   # Get the result of the navigation goal and check the status code to determine success or failure
-            status = result.status   # Nav2 status code for the navigation result
+            result = self._result_future.result()  # Get the result of the navigation goal and check the status code to determine success or failure
+            status = result.status  # Nav2 status code for the navigation result
 
-            if status == GoalStatus.STATUS_SUCCEEDED: # SUCCESS
+            if status == GoalStatus.STATUS_SUCCEEDED:  # SUCCESS
                 self._node.get_logger().info("Reached base station.")
-                self._success = True   # Mark navigation as successful and done
-                self._done = True   # Mark as done to prevent further processing
+                self._success = True  # Mark navigation as successful and done
+                self._done = True  # Mark as done to prevent further processing
                 return Status.SUCCESS
             else:
-                self._node.get_logger().error(f"Base navigation failed with status: {status}")
-                self._success = False   # Mark navigation as failed and done
-                self._done = True   # Mark as done to prevent further processing
+                self._node.get_logger().error(
+                    f"Base navigation failed with status: {status}"
+                )
+                self._success = False  # Mark navigation as failed and done
+                self._done = True  # Mark as done to prevent further processing
                 return Status.FAILURE
 
         return Status.RUNNING
@@ -380,13 +397,13 @@ class NavigateToBase(py_trees.behaviour.Behaviour):
         Args:
             new_status (Status): The new status.
         """
-        if (self._goal_handle is not None and not self._done): # Active goal handle exists
+        if (
+            self._goal_handle is not None and not self._done
+        ):  # Active goal handle exists
             self._node.get_logger().warn("Cancelling base navigation goal...")
-            self._goal_handle.cancel_goal_async()   # Cancel the goal asynchronously to avoid blocking the BT tick loop
+            self._goal_handle.cancel_goal_async()  # Cancel the goal asynchronously to avoid blocking the BT tick loop
 
-    def _build_pose_stamped(
-        self, x: float, y: float, yaw: float
-    ) -> PoseStamped:
+    def _build_pose_stamped(self, x: float, y: float, yaw: float) -> PoseStamped:
         """
         Build a PoseStamped for Nav2.
 
@@ -402,15 +419,17 @@ class NavigateToBase(py_trees.behaviour.Behaviour):
         pose.header.frame_id = "map"
         pose.header.stamp = self._node.get_clock().now().to_msg()
 
-        pose.pose.position.x = x   # Set the position from the base station coordinates
-        pose.pose.position.y = y   
-        pose.pose.position.z = 0.0   # Assuming flat ground, z is 0
+        pose.pose.position.x = x  # Set the position from the base station coordinates
+        pose.pose.position.y = y
+        pose.pose.position.z = 0.0  # Assuming flat ground, z is 0
 
-        qz = math.sin(yaw / 2.0)   # Convert yaw to quaternion (assuming roll=pitch=0)
-        qw = math.cos(yaw / 2.0)   # Quaternion for yaw rotation only
+        qz = math.sin(yaw / 2.0)  # Convert yaw to quaternion (assuming roll=pitch=0)
+        qw = math.cos(yaw / 2.0)  # Quaternion for yaw rotation only
 
-        pose.pose.orientation.z = qz   # Set the orientation from the base station yaw
-        pose.pose.orientation.w = qw   # Set the orientation w component for the quaternion
+        pose.pose.orientation.z = qz  # Set the orientation from the base station yaw
+        pose.pose.orientation.w = (
+            qw  # Set the orientation w component for the quaternion
+        )
 
         return pose
 
@@ -423,9 +442,6 @@ class DetectSurvivor(py_trees.behaviour.Behaviour):
     BroadcastSurvivorTF via was_found() and survivor_pose().
 
     """
-
-    SERVICE_NAME = 'detect_survivor'
-    SERVICE_TIMEOUT_SEC = 5.0
 
     def __init__(self, name: str, zone_manager: ZoneManager) -> None:
         """Initialize DetectSurvivor BT node.
@@ -443,7 +459,6 @@ class DetectSurvivor(py_trees.behaviour.Behaviour):
         self._survivor_xy = None
         self._current_survivor_id = ""
 
-
     def setup(self, **kwargs):
         """Create the detect_survivor service client.
 
@@ -452,10 +467,10 @@ class DetectSurvivor(py_trees.behaviour.Behaviour):
         """
         # Called once before the first tick.
         # Acquire ROS 2 resources here (node, publishers, etc.)
-        self._node = kwargs['node']
-        self._client = self._node.create_client(DetectSurvivorSrv, 'detect_survivor')
+        self._node = kwargs["node"]
+        self._client = self._node.create_client(DetectSurvivorSrv, "detect_survivor")
 
-    def initialise(self)-> None:
+    def initialise(self) -> None:
         """Reset state each time this node becomes active."""
 
         # Called each time the node become active again
@@ -463,7 +478,6 @@ class DetectSurvivor(py_trees.behaviour.Behaviour):
         self._future = None
         self._was_found = False
         self._survivor_xy = None
-        
 
     def update(self) -> py_trees.common.Status:
         """Poll the detect_survivor service; return RUNNING/SUCCESS/FAILURE.
@@ -476,29 +490,35 @@ class DetectSurvivor(py_trees.behaviour.Behaviour):
 
         # 1st tick (no call made yet) : submit the request
         if self._future is None:
-            if not self._client.service_is_ready(): # server running ??
-                self._node.get_logger().warn("detect_survivor service not ready, retrying...")
+            if not self._client.service_is_ready():  # server running ??
+                self._node.get_logger().warn(
+                    "detect_survivor service not ready, retrying..."
+                )
                 return py_trees.common.Status.RUNNING
-            else: 
-                zone_id = self._zone_manager.current_zone()['id']
-                self._node.get_logger().info(f"Calling detect_survivor for {zone_id}...")
+            else:
+                zone_id = self._zone_manager.current_zone()["id"]
+                self._node.get_logger().info(
+                    f"Calling detect_survivor for {zone_id}..."
+                )
 
                 request = DetectSurvivorSrv.Request()
                 request.zone_id = zone_id
                 self._future = self._client.call_async(request)
-                return py_trees.common.Status.RUNNING # running and waiting for response
-        
+                return (
+                    py_trees.common.Status.RUNNING
+                )  # running and waiting for response
+
         # 2nd tick : poll until server response and done
         if not self._future.done():
             return py_trees.common.Status.RUNNING
-        
+
         # final tick : response arrive , then read result
         response = self._future.result()
-        self._future = None # reset storing val
-        
-        if response is None: #sth went wrong return failure
+        self._future = None  # reset storing val
+
+        if response is None:  # sth went wrong return failure
             return py_trees.common.Status.FAILURE
-        
+
         self._was_found = response.found
         if response.found:
             self._survivor_xy = (response.survivor_x, response.survivor_y)
@@ -508,12 +528,12 @@ class DetectSurvivor(py_trees.behaviour.Behaviour):
         if self._survivor_xy:
             sx, sy = self._survivor_xy
             self._node.get_logger().info(
-                f"DetectSurvivor: found={self._was_found} at ({sx:.2f}, {sy:.2f})")
+                f"DetectSurvivor: found={self._was_found} at ({sx:.2f}, {sy:.2f})"
+            )
         else:
             self._node.get_logger().info(f"DetectSurvivor: found={self._was_found}")
         return py_trees.common.Status.SUCCESS
 
-        
     def was_found(self) -> bool:
         """Return True if the last detection found a survivor.
 
@@ -523,15 +543,14 @@ class DetectSurvivor(py_trees.behaviour.Behaviour):
         return self._was_found
 
     def survivor_pose(self) -> tuple[float, float] | None:
-        """ 
-        Window into stored result here
+        """
+        Read into stored result here
 
         Returns:
             Tuple of (x, y) survivor coord.
         """
-        return (self._survivor_xy)
-    
-        
+        return self._survivor_xy
+
     def set_survivor_id(self, survivor_id: str) -> None:
         """Store the TF frame name assigned to current survivor.
 
@@ -547,17 +566,18 @@ class DetectSurvivor(py_trees.behaviour.Behaviour):
             The survivor ID string e.g. 'survivor_1'.
         """
         return self._current_survivor_id
-        
+
     def terminate(self, new_status: py_trees.common.Status) -> None:
         """No cleanup needed for this node."""
         pass
 
-class BroadcastSurvivorTF(py_trees.behaviour.Behaviour):
-    """BT action node that broadcasts a static TF frame for a survivor.
-    
-    """
 
-    def __init__(self, name:str, detect_node: DetectSurvivor, zone_manager: ZoneManager) -> None:
+class BroadcastSurvivorTF(py_trees.behaviour.Behaviour):
+    """BT action node that broadcasts a static TF frame for a survivor."""
+
+    def __init__(
+        self, name: str, detect_node: DetectSurvivor, zone_manager: ZoneManager
+    ) -> None:
         """Initialize BroadcastSurvivorTF node
 
         Args:
@@ -581,19 +601,17 @@ class BroadcastSurvivorTF(py_trees.behaviour.Behaviour):
         """
         return self._last_survivor_id
 
-    
     def setup(self, **kwargs):
         """Create the StaticTransformBroadcaster.
 
         Args:
             **kwargs: Must contain 'node' (rclpy.node.Node).
         """
-        self._node = kwargs['node']
-        self._broadcaster = StaticTransformBroadcaster(kwargs['node'])
-
+        self._node = kwargs["node"]
+        self._broadcaster = StaticTransformBroadcaster(kwargs["node"])
 
     def initialise(self):
-        """Nothing to reset — this node reads and broadcasts instantly."""
+        """Nothing to reset here, this node reads and broadcasts instantly."""
         pass
 
     def update(self) -> py_trees.common.Status:
@@ -607,19 +625,21 @@ class BroadcastSurvivorTF(py_trees.behaviour.Behaviour):
             SUCCESS after broadcasting.
         """
 
-        pose = self._detect_node.survivor_pose() 
-        if pose is None: # faliure if no surivor pose available
+        pose = self._detect_node.survivor_pose()
+        if pose is None:  # faliure if no surivor pose available
             return py_trees.common.Status.FAILURE
 
         sx, sy = pose
-        survivor_id = self._zone_manager.next_survivor_id()# get survivor id
+        survivor_id = self._zone_manager.next_survivor_id()  # get survivor id
 
-        self._detect_node.set_survivor_id(survivor_id) # store id so notifybase can read
+        self._detect_node.set_survivor_id(
+            survivor_id
+        )  # store id so notifybase can read
 
         t = TransformStamped()
         t.header.stamp = self._node.get_clock().now().to_msg()
         t.header.frame_id = "map"  # parent frame
-        t.child_frame_id = survivor_id # new frame name
+        t.child_frame_id = survivor_id  # new frame name
         t.transform.translation.x = sx  # survivor x
         t.transform.translation.y = sy  # survivor y
         t.transform.translation.z = 0.0
@@ -627,16 +647,20 @@ class BroadcastSurvivorTF(py_trees.behaviour.Behaviour):
         t.transform.rotation.y = 0.0
         t.transform.rotation.z = 0.0
         t.transform.rotation.w = 1.0  # identity rotation
-        
+
         self._broadcaster.sendTransform(t)
         self._last_survivor_id = survivor_id
         self._node.get_logger().info("Survivor detected at zone!")
-        self._node.get_logger().info(f"Broadcasting TF frame: {survivor_id} at ({sx:.2f}, {sy:.2f}) in map frame.")        
+        self._node.get_logger().info(
+            f"Broadcasting TF frame: {survivor_id} at ({sx:.2f}, {sy:.2f}) in map frame."
+        )
+
         return py_trees.common.Status.SUCCESS
-            
+
     def terminate(self, new_status: py_trees.common.Status) -> None:
         """No cleanup needed for this node."""
         pass
+
 
 class NotifyBase(py_trees.behaviour.Behaviour):
     """Uses the async-poll pattern to avoid blocking the executor.
@@ -647,12 +671,10 @@ class NotifyBase(py_trees.behaviour.Behaviour):
         name: Display name for the BT node.
         detect_node: Reference to the DetectSurvivor BT node.
     """
-    SERVICE_NAME = 'report_survivor'
-    SERVICE_TIMEOUT_SEC = 5.0
 
-    def __init__(self, name: str, detect_node: DetectSurvivor ) -> None:
+    def __init__(self, name: str, detect_node: DetectSurvivor) -> None:
         """Initialize NotifyBase BT node.
-        
+
         Args:
             name: Display name for the BT node.
             detect_node: Reference to the DetectSurvivor BT node.
@@ -662,8 +684,8 @@ class NotifyBase(py_trees.behaviour.Behaviour):
         self._node = None
         self._client = None
         self._future = None
-       
-    def setup(self, **kwargs)-> None:
+
+    def setup(self, **kwargs) -> None:
         """Create the report_survivor service client.
 
         Args:
@@ -671,15 +693,14 @@ class NotifyBase(py_trees.behaviour.Behaviour):
         """
         # Called once before the first tick.
         # Acquire ROS 2 resources here (node, publishers, etc.)
-        self._node = kwargs['node']
-        self._client = self._node.create_client(ReportSurvivorSrv, 'report_survivor')
+        self._node = kwargs["node"]
+        self._client = self._node.create_client(ReportSurvivorSrv, "report_survivor")
         pass
 
-    def initialise(self)-> None:
+    def initialise(self) -> None:
         """Reset future each time this node becomes active."""
         # Called each time the node become active again
         self._future = None
-
 
     def update(self) -> py_trees.common.Status:
         """Send survivor report
@@ -691,54 +712,59 @@ class NotifyBase(py_trees.behaviour.Behaviour):
 
         # 1st tick (no call made yet) : submit the request
         if self._future is None:
-            if not self._client.service_is_ready(): # server running ??
-                self._node.get_logger().warn("report_survivor service not ready, retrying...")
+            if not self._client.service_is_ready():  # server running ??
+                self._node.get_logger().warn(
+                    "report_survivor service not ready, retrying..."
+                )
                 return py_trees.common.Status.RUNNING
-            
+
             pose = self._detect_node.survivor_pose()
             survivor_id = self._detect_node.survivor_id()
 
             if pose is None or not survivor_id:
                 return py_trees.common.Status.FAILURE
-            
+
             x, y = pose
             location = PointStamped()
-            location.header.frame_id = "map"    # coordinates are in map frame
+            location.header.frame_id = "map"  # coordinates are in map frame
             location.header.stamp = self._node.get_clock().now().to_msg()
 
-            location.point.x = x 
+            location.point.x = x
             location.point.y = y
             location.point.z = 0.0
-            
+
             request = ReportSurvivorSrv.Request()
             request.survivor_id = survivor_id
             request.location = location
 
             self._future = self._client.call_async(request)
             self._node.get_logger().info(f"Reporting {survivor_id} to base...")
-            return py_trees.common.Status.RUNNING # running and waiting for response
-        
+            return py_trees.common.Status.RUNNING  # running and waiting for response
+
         # 2nd tick : poll until server response and done
         if not self._future.done():
             return py_trees.common.Status.RUNNING
-        
+
         # final tick : response arrive , then read result
         response = self._future.result()
-        self._future = None # reset storing val
-        
-        if response is None: #sth went wrong return failure
-            return py_trees.common.Status.FAILURE
-        
-        if not response.acknowledged: # server said "not acknowledged"
+        self._future = None  # reset storing val
+
+        if response is None:  # sth went wrong return failure
             return py_trees.common.Status.FAILURE
 
-        self._node.get_logger().info(f"Base acknowledged {self._detect_node.survivor_id()}.")
+        if not response.acknowledged:  # server said "not acknowledged"
+            return py_trees.common.Status.FAILURE
+
+        self._node.get_logger().info(
+            f"Base acknowledged {self._detect_node.survivor_id()}."
+        )
 
         return py_trees.common.Status.SUCCESS
-        
+
     def terminate(self, new_status: py_trees.common.Status) -> None:
         """No cleanup needed for this node."""
         pass
+
 
 class AdvanceZone(py_trees.behaviour.Behaviour):
     """
@@ -762,8 +788,8 @@ class AdvanceZone(py_trees.behaviour.Behaviour):
             zone_manager (ZoneManager): Shared zone manager instance.
         """
         super().__init__(name)
-        self._zone_manager = zone_manager   # Reference to the shared ZoneManager for advancing to the next zone
-        self._node: Optional[Node] = None   
+        self._zone_manager = zone_manager  # Reference to the shared ZoneManager for advancing to the next zone
+        self._node: Optional[Node] = None
 
     def setup(self, **kwargs) -> None:
         """
@@ -780,15 +806,18 @@ class AdvanceZone(py_trees.behaviour.Behaviour):
         Returns:
             Status.SUCCESS: Always succeeds after advancing.
         """
-        current_zone = self._zone_manager.current_zone()   # Get the current zone info for logging before advancing
+        current_zone = (
+            self._zone_manager.current_zone()
+        )  # Get the current zone info for logging before advancing
 
-        self._node.get_logger().info(   # Log the zone we just finished before advancing to the next one
+        self._node.get_logger().info(  # Log the zone we just finished before advancing to the next one
             f"Finished {current_zone['id']}. Advancing to next zone."
         )
 
-        self._zone_manager.advance()   # Advance to the next zone in the ZoneManager's patrol sequence
+        self._zone_manager.advance()  # Advance to the next zone in the ZoneManager's patrol sequence
 
         return Status.SUCCESS
+
 
 class LogNoDetection(py_trees.behaviour.Behaviour):
     """
@@ -813,7 +842,7 @@ class LogNoDetection(py_trees.behaviour.Behaviour):
             zone_manager (ZoneManager): Shared zone manager instance.
         """
         super().__init__(name)
-        self._zone_manager = zone_manager   # Reference to the shared ZoneManager for accessing the current zone information for logging
+        self._zone_manager = zone_manager  # Reference to the shared ZoneManager for accessing the current zone information for logging
         self._node: Optional[Node] = None
 
     def setup(self, **kwargs) -> None:
@@ -831,10 +860,10 @@ class LogNoDetection(py_trees.behaviour.Behaviour):
         Returns:
             Status.SUCCESS: Always succeeds after logging.
         """
-        zone = self._zone_manager.current_zone()   # Get the current zone info for logging
+        zone = (
+            self._zone_manager.current_zone()
+        )  # Get the current zone info for logging
 
-        self._node.get_logger().info(
-            f"No survivor found at {zone['id']}."
-        )
+        self._node.get_logger().info(f"No survivor found at {zone['id']}.")
 
         return Status.SUCCESS
