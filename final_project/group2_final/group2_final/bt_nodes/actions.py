@@ -163,7 +163,7 @@ class NavigateToZone(py_trees.behaviour.Behaviour):
             result = self._result_future.result()  # Get the result of the navigation goal and check the status code to determine success or failure
             status = result.status  # Nav2 status code for the navigation result
 
-            if status == 4:  # SUCCEEDED
+            if status == GoalStatus.STATUS_SUCCEEDED:  # SUCCEEDED
                 zone = (
                     self._zone_manager.current_zone()
                 )  # Get the current zone info for logging
