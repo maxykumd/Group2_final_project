@@ -1,7 +1,7 @@
 # Course: ENPM605 
 ### Section: 0101
 ### Professor: Zeid Kootbally
-### Assignment: Final Group Project
+### Assignment: Final Group Project - Group 2
 ### Date: 05/12/2026
 
 
