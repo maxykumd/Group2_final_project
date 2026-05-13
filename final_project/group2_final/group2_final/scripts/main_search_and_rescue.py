@@ -7,6 +7,7 @@ import py_trees_ros
 import time
 
 from rclpy.node import Node
+from rclpy.parameter import Parameter
 from geometry_msgs.msg import PoseStamped
 from nav2_simple_commander.robot_navigator import BasicNavigator
 
@@ -149,6 +150,9 @@ def main(args: list[str] | None = None) -> None:
 
     # feed AMCL with spawn position with BasicNavigator
     navigator = BasicNavigator(node_name="basic_navigator")
+    navigator.set_parameters([
+        Parameter("use_sim_time", Parameter.Type.BOOL, True)
+    ])
     initial_pose = PoseStamped()
     initial_pose.header.frame_id = "map"
     initial_pose.header.stamp = navigator.get_clock().now().to_msg()
